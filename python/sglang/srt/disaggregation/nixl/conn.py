@@ -235,10 +235,14 @@ class NixlKVManager(BaseKVManager):
         assert not is_last or (is_last and aux_index is not None)
 
         # Wait for transfer info to be populated by bootstrap thread.
+
+        logging.info("WAITING...")
         with self.condition:
             self.condition.wait_for(lambda: bootstrap_room in self.transfer_infos)
             req = self.transfer_infos[bootstrap_room]
         assert bootstrap_room == req.room
+
+        logging.info("DONE WAITING")
 
         peer_name = self._add_remote(bootstrap_room, req.agent_metadata)
         chunked_dst_kv_indice = req.dst_kv_indices[index_slice]
@@ -323,8 +327,14 @@ class NixlKVManager(BaseKVManager):
 
         def bootstrap_thread():
             """This thread recvs transfer info from the decode engine"""
+
+            logging.info("bootstrap thread started")
             while True:
                 waiting_req_bytes = self.server_socket.recv_multipart()
+
+                # logging.info(
+                #     f"bootstrap thread received: {waiting_req_bytes}, {len(waiting_req_bytes)}"
+                # )
                 room = waiting_req_bytes[0].decode("ascii")
                 if room == "None":
                     continue
@@ -357,6 +367,7 @@ class NixlKVSender(BaseKVSender):
         index_slice: slice,
         is_last: bool,
     ):
+        logger.info("nixl add transfer request")
         new_xfer_handles = self.kv_mgr.add_transfer_request(
             self.bootstrap_room,
             kv_indices,
@@ -369,6 +380,7 @@ class NixlKVSender(BaseKVSender):
         self.chunk_id += 1
         if is_last:
             self.has_sent = True
+        logger.info("DONE!!")
 
     def poll(self) -> KVPoll:
         if not self.has_sent:
@@ -393,6 +405,10 @@ class NixlKVReceiver(BaseKVReceiver):
         bootstrap_addr: str,
         bootstrap_room: Optional[int] = None,
     ):
+
+        logger.info(
+            f"Initializing NixlKVReceiver with bootstrap room: {bootstrap_room} and address: {bootstrap_addr}")
+        
         self.bootstrap_room = bootstrap_room
         self.bootstrap_addr = bootstrap_addr
         self.kv_mgr = mgr
@@ -443,8 +459,8 @@ class NixlKVReceiver(BaseKVReceiver):
         self.prefill_server_url = (
             f"{self.bootstrap_info['rank_ip']}:{self.bootstrap_info['rank_port']}"
         )
-        logger.debug(
-            f"Fetched bootstrap info: {self.bootstrap_info} for engine rank: {self.kv_mgr.kv_args.engine_rank}"
+        logger.info(
+            f"Fetched bootstrap info: {self.bootstrap_info} for engine rank: {self.kv_mgr.kv_args.engine_rank}, prefill server url: {self.prefill_server_url}"
         )
 
         packed_kv_data_ptrs = b"".join(

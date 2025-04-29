@@ -202,6 +202,7 @@ class SchedulerDisaggregationPrefillMixin:
                 self.process_batch_result_disagg_prefill(batch, result)
 
             if len(self.disagg_prefill_inflight_queue) > 0:
+                logger.info("here!!")
                 self.process_disagg_prefill_inflight_queue()
 
             if batch is None and len(self.disagg_prefill_inflight_queue) == 0:
@@ -215,6 +216,8 @@ class SchedulerDisaggregationPrefillMixin:
 
     @torch.no_grad()
     def event_loop_overlap_disagg_prefill(self):
+    
+
         self.result_queue = deque()
 
         while True:
@@ -263,6 +266,9 @@ class SchedulerDisaggregationPrefillMixin:
         Adapted from process_batch_result_prefill
         """
 
+        logger.info(f"process_batch_result_disagg_prefill")
+        
+
         (
             logits_output,
             next_token_ids,
@@ -286,12 +292,21 @@ class SchedulerDisaggregationPrefillMixin:
 
         for req, next_token_id in zip(batch.reqs, next_token_ids, strict=True):
             req: Req
+            logger.info(f"req is chunked {req.is_chunked}")
+
             if req.is_chunked <= 0:
+                logger.info("HEHE")
                 # There is no output_ids for prefill
                 req.output_ids.append(next_token_id)
                 self.tree_cache.cache_unfinished_req(req)  # update the tree and lock
+                logger.info("HEHE2")
                 self.send_kv_chunk(req, token_id=next_token_id)
+                logger.info("HEHE3")
                 self.disagg_prefill_inflight_queue.append(req)
+                logger.info(f"req is chunked {req.is_chunked}"
+                            f"len is {len(self.disagg_prefill_inflight_queue)}"
+                            )
+
             else:
                 # being chunked reqs' prefill is not finished
                 req.is_chunked -= 1
@@ -403,7 +418,7 @@ class SchedulerDisaggregationPrefillMixin:
                 f"Skip sending kv chunk for request {req.rid=} {req.bootstrap_room=} because page_indices is empty"
             )
             return
-
+        logger.info("!!SEND!!")
         req.disagg_kv_sender.send(
             page_indices, slice(page_start_idx, page_end_idx), last_chunk
         )
